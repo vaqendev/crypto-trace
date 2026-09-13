@@ -1,0 +1,153 @@
+import hashlib
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+import networkx as nx
+
+app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+VASP_REGISTRY = {
+    "0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0be": {"name": "Binance Deposit", "type": "Deposit Wallet", "base_weight": 1.00},
+    "0x28c6c06298d514db089934071355e5743bf21d60": {"name": "Binance Hot Wallet", "type": "Hot Wallet", "base_weight": 0.85},
+    "0x70e244eb3469a6f23f40f3b0645a278d6b8296a2": {"name": "CoinDCX Vault", "type": "Deposit Wallet", "base_weight": 1.00},
+    "0x503279367d60e6e73685f0967db0ca27cbfa4762": {"name": "WazirX Hot Wallet", "type": "Hot Wallet", "base_weight": 0.85},
+}
+
+KNOWN_CASES = {
+    # Case 1: 1-Hop Direct
+    "0x1111111111111111111111111111111111111111": [
+        {"from": "0x1111111111111111111111111111111111111111", "to": "0x3f5ce5fbfe3e9af3971dd833d26ba9b5c936f0be", "value_usd": 12000.0, "age_days": 5, "token": "USDT"}
+    ],
+    # Case 2: 2-Hop Layering
+    "0x89205a3a3b2a69de6dbf7f01ed13b2108b2c43e7": [
+        {"from": "0x89205a3a3b2a69de6dbf7f01ed13b2108b2c43e7", "to": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", "value_usd": 4500.0, "age_days": 12, "token": "USDT"},
+        {"from": "0xa1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1", "to": "0x70e244eb3469a6f23f40f3b0645a278d6b8296a2", "value_usd": 4400.0, "age_days": 10, "token": "USDT"}
+    ],
+    # Case 3: 3-Hop Obfuscation
+    "0x9999999999999999999999999999999999999999": [
+        {"from": "0x9999999999999999999999999999999999999999", "to": "0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2", "value_usd": 300.0, "age_days": 100, "token": "ETH"},
+        {"from": "0xb2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2", "to": "0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3", "value_usd": 280.0, "age_days": 95, "token": "ETH"},
+        {"from": "0xc3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3c3", "to": "0x503279367d60e6e73685f0967db0ca27cbfa4762", "value_usd": 250.0, "age_days": 92, "token": "ETH"}
+    ]
+}
+
+@app.get('/favicon.ico', include_in_schema=False)
+async def favicon():
+    return ""
+
+@app.get("/")
+def home():
+    with open("index.html", "r") as f:
+        return HTMLResponse(content=f.read())
+
+@app.get("/api/trace/{address}")
+def trace_address(address: str):
+    target = address.lower().strip()
+    
+    # 1. Determine ledger transactions for this specific address
+    if target in KNOWN_CASES:
+        ledger = KNOWN_CASES[target]
+    else:
+        # Dynamic deterministic path generation for any arbitrary/real address entered
+        hash_val = int(hashlib.md5(target.encode()).hexdigest(), 16)
+        mule_addr = "0x" + hashlib.sha256((target + "mule").encode()).hexdigest()[:40]
+        
+        # Pick a VASP deterministically based on input address hash
+        vasp_keys = list(VASP_REGISTRY.keys())
+        assigned_vasp = vasp_keys[hash_val % len(vasp_keys)]
+        
+        ledger = [
+            {"from": target, "to": mule_addr, "value_usd": 5200.0, "age_days": 8, "token": "USDT"},
+            {"from": mule_addr, "to": assigned_vasp, "value_usd": 5100.0, "age_days": 6, "token": "USDT"}
+        ]
+
+    # 2. Build NetworkX Graph ONLY for this trace
+    G = nx.DiGraph()
+    G.add_node(target, label="Suspect Target", group="suspect")
+    
+    for tx in ledger:
+        src, dst = tx["from"].lower(), tx["to"].lower()
+        G.add_node(src, group="suspect" if src == target else "intermediate")
+        
+        dst_group = "vasp" if dst in VASP_REGISTRY else "intermediate"
+        dst_label = VASP_REGISTRY[dst]["name"] if dst in VASP_REGISTRY else dst[:8] + "..."
+        G.add_node(dst, group=dst_group, label=dst_label)
+        
+        G.add_edge(src, dst, value_usd=tx["value_usd"], age_days=tx["age_days"], token=tx["token"], label=f"{tx['token']} (${tx['value_usd']:.0f})")
+
+    # 3. Compute Shortest Path & Math Score
+    attributed_vasp = None
+    confidence_score = 0
+    shortest_path = [target]
+    
+    vasp_nodes = [n for n in G.nodes() if n in VASP_REGISTRY]
+    best_path = None
+    min_hops = float('inf')
+
+    for vasp in vasp_nodes:
+        if nx.has_path(G, target, vasp):
+            path = nx.shortest_path(G, target, vasp)
+            hops = len(path) - 1
+            if hops < min_hops:
+                min_hops = hops
+                best_path = path
+
+    if best_path:
+        shortest_path = best_path
+        target_vasp_addr = best_path[-1]
+        vasp_info = VASP_REGISTRY[target_vasp_addr]
+        attributed_vasp = vasp_info["name"]
+        
+        k = len(best_path) - 1
+        W_base = vasp_info["base_weight"]
+        
+        H_k = 1.00 if k == 1 else (0.85 if k == 2 else (0.50 if k == 3 else 0.00))
+        
+        last_edge = G.edges[best_path[-2], best_path[-1]]
+        val_usd = last_edge["value_usd"]
+        age = last_edge["age_days"]
+
+        R_dt = 1.00 if age <= 30 else (0.90 if age <= 90 else 0.75)
+        V_w = 1.00 if val_usd >= 100 else (0.70 if val_usd >= 10 else 0.30)
+
+        raw_score = W_base * H_k * R_dt * V_w * 100
+        confidence_score = min(99, int(raw_score))
+
+    # 4. Construct JSON Payload (Only nodes connected to target)
+    nodes_payload = []
+    for n in G.nodes():
+        nodes_payload.append({
+            "id": n,
+            "label": G.nodes[n].get("label", n[:8] + "..."),
+            "group": G.nodes[n].get("group", "intermediate")
+        })
+
+    edges_payload = []
+    for u, v in G.edges():
+        edges_payload.append({
+            "from": u,
+            "to": v,
+            "label": G.edges[u, v]["label"]
+        })
+
+    return {
+        "nodes": nodes_payload,
+        "edges": edges_payload,
+        "attribution": {
+            "vasp": attributed_vasp or "Unattributed / No VASP Path",
+            "confidence": confidence_score,
+            "path": shortest_path
+        }
+    }
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
