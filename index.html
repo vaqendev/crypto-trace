@@ -3,170 +3,704 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAHYOG - Crypto Wallet Attribution Engine</title>
+    <title>SAHYOG - Crypto Wallet Attribution Engine (D4C)</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Vis.js Network CDN -->
     <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+    
     <style>
-        #network-canvas { height: 500px; background-color: #0f172a; border-radius: 0.5rem; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #1a1f3a 100%);
+        }
+
+        #network-canvas {
+            height: 500px;
+            background-color: #0f172a;
+            border-radius: 0.75rem;
+            position: relative;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid #cbd5e1;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-overlay {
+            backdrop-filter: blur(4px);
+        }
+
+        .transaction-hop {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            padding: 6px 0;
+            color: #cbd5e1;
+        }
+
+        .transaction-hop-arrow {
+            color: #475569;
+            font-weight: bold;
+        }
+
+        .badge-success {
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #10b981;
+        }
+
+        .badge-warning {
+            background-color: rgba(245, 158, 11, 0.1);
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            color: #f59e0b;
+        }
+
+        .badge-error {
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #ef4444;
+        }
+
+        .confidence-bar {
+            height: 8px;
+            background-color: #1e293b;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .confidence-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #3b82f6, #10b981);
+            transition: width 0.5s ease;
+        }
+
+        .info-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(71, 85, 105, 0.5);
+            border-radius: 0.75rem;
+            padding: 16px;
+            transition: all 0.3s ease;
+        }
+
+        .info-card:hover {
+            background: rgba(15, 23, 42, 0.8);
+            border-color: rgba(71, 85, 105, 0.7);
+        }
+
+        input[type="text"]:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 9999px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-processing {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+
+        .status-success {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+
+        .error-alert {
+            background-color: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #fca5a5;
+            padding: 12px 16px;
+            border-radius: 0.75rem;
+            font-size: 13px;
+        }
+
+        .success-alert {
+            background-color: rgba(16, 185, 129, 0.1);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #86efac;
+            padding: 12px 16px;
+            border-radius: 0.75rem;
+            font-size: 13px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .visible {
+            display: block;
+        }
+
+        @media print {
+            body { background: #ffffff !important; color: #000000 !important; }
+            header, #searchBarSection, #sahyogBtn, #traceBtn, .status-badge { display: none !important; }
+            .info-card { border: 1px solid #999 !important; background: #fff !important; color: #000 !important; }
+            #network-canvas { border: 1px solid #999; }
+            #printHeader { display: block !important; margin-bottom: 16px; }
+        }
+        #printHeader { display: none; }
     </style>
 </head>
-<body class="bg-slate-900 text-slate-100 min-h-screen font-sans p-6">
-    <div class="max-w-7xl mx-auto space-y-6">
+<body class="text-slate-100 min-h-screen font-sans">
+    <div class="max-w-7xl mx-auto space-y-6 p-4 md:p-6">
         
         <!-- Header -->
-        <header class="flex justify-between items-center border-b border-slate-800 pb-4">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-800 pb-4 gap-4">
             <div>
-                <h1 class="text-2xl font-bold text-blue-400">SAHYOG Intelligence Engine</h1>
-                <p class="text-xs text-slate-400">Automated Crypto Wallet Attribution & VASP Mapping</p>
+                <h1 class="text-3xl font-bold text-blue-400">SAHYOG Intelligence Engine</h1>
+                <p class="text-sm text-slate-400 mt-1">Automated Crypto Wallet Attribution & VASP Mapping</p>
             </div>
-            <span class="bg-blue-900/50 text-blue-300 text-xs px-3 py-1 rounded-full border border-blue-700 font-mono">MHA Cybercrime Cell Demo</span>
+            <div class="flex flex-col md:flex-row gap-3 items-start md:items-center">
+                <span class="bg-blue-900/50 text-blue-300 text-xs px-3 py-1.5 rounded-full border border-blue-700 font-mono">MHA Cybercrime Cell Demo</span>
+                <span id="apiStatus" class="status-badge status-processing hidden">
+                    <span class="spinner"></span>
+                    Processing...
+                </span>
+            </div>
         </header>
 
-        <!-- Search Bar -->
-        <div class="flex gap-4">
-            <input id="walletInput" type="text" value="0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7" placeholder="Enter Suspect Ethereum Wallet Address..." class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:border-blue-500">
-            <button onclick="runTrace()" class="bg-blue-600 hover:bg-blue-500 text-white font-medium px-6 py-3 rounded-lg text-sm transition shadow-lg shadow-blue-900/30">Trace Transactions</button>
+        <!-- Print-only report header (populated before printing) -->
+        <div id="printHeader">
+            <h2 style="font-size:18px;font-weight:700;">SAHYOG Intelligence Engine — Investigation Report</h2>
+            <p style="font-size:12px;">Generated: <span id="printTimestamp"></span></p>
+        </div>
+
+        <!-- Search Bar & Status -->
+        <div id="searchBarSection" class="space-y-3">
+            <div class="flex flex-col md:flex-row gap-3">
+                <input 
+                    id="walletInput" 
+                    type="text" 
+                    value="0x89205A3A3b2A69De6Dbf7f01ED13B2108B2c43e7" 
+                    placeholder="Enter suspect Ethereum wallet address (0x...)" 
+                    class="flex-1 bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-sm font-mono focus:outline-none focus:border-blue-500 text-slate-100 placeholder-slate-500 transition"
+                    autocomplete="off"
+                >
+                <button 
+                    id="traceBtn"
+                    onclick="runTrace()" 
+                    class="bg-blue-600 hover:bg-blue-500 text-white font-semibold px-6 py-3 rounded-lg text-sm transition shadow-lg shadow-blue-900/30 whitespace-nowrap"
+                >
+                    Trace Transactions
+                </button>
+            </div>
+            <div id="alertContainer" class="hidden fade-in"></div>
         </div>
 
         <!-- Main Workspace Grid -->
         <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             <!-- Graph Visualization Canvas (2 Cols) -->
-            <div class="lg:col-span-2 bg-slate-800/50 p-4 border border-slate-800 rounded-xl">
-                <div class="flex justify-between items-center mb-3">
-                    <h2 class="text-sm font-semibold text-slate-300">Transaction Hop Graph</h2>
-                    <div class="flex gap-4 text-xs font-medium">
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-red-500 inline-block shadow-sm shadow-red-500/50"></span> Suspect Target</span>
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-yellow-500 inline-block shadow-sm shadow-yellow-500/50"></span> Mule Hop</span>
-                        <span class="flex items-center gap-1.5"><span class="w-3 h-3 rounded-full bg-emerald-500 inline-block shadow-sm shadow-emerald-500/50"></span> Attributed VASP</span>
+            <div class="lg:col-span-2 bg-slate-800/40 backdrop-blur-sm p-4 border border-slate-800 rounded-xl">
+                <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-3">
+                    <div>
+                        <h2 class="text-sm font-semibold text-slate-300">Transaction Hop Graph</h2>
+                        <p id="graphStatus" class="text-xs text-slate-500 mt-1">Enter a wallet address to visualize transaction flow</p>
+                    </div>
+                    <div class="flex gap-3 text-xs font-medium flex-wrap">
+                        <span class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-red-500 shadow-sm shadow-red-500/50"></span>
+                            <span class="text-slate-300">Suspect Target</span>
+                        </span>
+                        <span class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-yellow-500 shadow-sm shadow-yellow-500/50"></span>
+                            <span class="text-slate-300">Intermediate</span>
+                        </span>
+                        <span class="flex items-center gap-2">
+                            <span class="w-3 h-3 rounded-full bg-emerald-500 shadow-sm shadow-emerald-500/50"></span>
+                            <span class="text-slate-300">Attributed VASP</span>
+                        </span>
                     </div>
                 </div>
                 <div id="network-canvas"></div>
+                <div id="networkLoading" class="hidden flex items-center justify-center h-96 gap-2">
+                    <span class="spinner"></span>
+                    <span class="text-slate-400">Building transaction graph...</span>
+                </div>
             </div>
 
             <!-- Attribution & Report Sidebar (1 Col) -->
-            <div class="bg-slate-800/50 p-5 border border-slate-800 rounded-xl flex flex-col justify-between space-y-4">
+            <div class="bg-slate-800/40 backdrop-blur-sm p-5 border border-slate-800 rounded-xl flex flex-col justify-between space-y-4">
                 <div>
-                    <h2 class="text-sm font-semibold text-slate-300 mb-4">Attribution Analysis</h2>
+                    <h2 class="text-sm font-semibold text-slate-300 mb-4 flex items-center gap-2">
+                        <span>📊 Attribution Analysis</span>
+                    </h2>
                     
                     <div class="space-y-4">
-                        <div class="bg-slate-900 p-4 rounded-lg border border-slate-700/50">
-                            <div class="text-xs text-slate-400">Nearest Attributed VASP</div>
-                            <div id="vaspName" class="text-lg font-bold text-emerald-400 mt-1">Awaiting Trace...</div>
+                        <!-- VASP Attribution -->
+                        <div class="info-card">
+                            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Nearest Attributed VASP</div>
+                            <div id="vaspName" class="text-lg font-bold text-emerald-400 mt-2 break-all">
+                                <span class="pulse text-slate-500">Awaiting trace...</span>
+                            </div>
+                            <div id="vaspType" class="text-xs text-slate-500 mt-1 hidden"></div>
                         </div>
 
-                        <div class="bg-slate-900 p-4 rounded-lg border border-slate-700/50">
-                            <div class="text-xs text-slate-400">Confidence Score</div>
-                            <div class="flex items-baseline gap-2 mt-1">
-                                <span id="confScore" class="text-3xl font-extrabold text-blue-400">0%</span>
-                                <span class="text-xs text-slate-500">Base × Hop × Recency × Vol</span>
+                        <!-- Confidence Score -->
+                        <div class="info-card">
+                            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Confidence Score</div>
+                            <div class="flex items-baseline gap-3 mt-2">
+                                <span id="confScore" class="text-4xl font-extrabold text-blue-400">0%</span>
+                                <div class="flex-1">
+                                    <div class="confidence-bar">
+                                        <div id="confFill" class="confidence-fill" style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-2">Base × Hop × Recency × Volume</div>
+                        </div>
+
+                        <!-- Hop Count & Risk Level -->
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="info-card">
+                                <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Hop Count</div>
+                                <div id="hopCount" class="text-3xl font-bold text-blue-300 mt-2">—</div>
+                            </div>
+                            <div class="info-card">
+                                <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Risk Level</div>
+                                <div id="riskLevel" class="text-sm font-bold mt-2 badge-warning inline-block px-2 py-1 rounded">—</div>
                             </div>
                         </div>
 
-                        <div class="bg-slate-900 p-4 rounded-lg border border-slate-700/50">
-                            <div class="text-xs text-slate-400 mb-1">Attribution Hop Path</div>
-                            <div id="pathDisplay" class="text-xs font-mono text-slate-300 break-all space-y-1">None</div>
+                        <!-- Attribution Path -->
+                        <div class="info-card">
+                            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide mb-2">Attribution Hop Path</div>
+                            <div id="pathDisplay" class="text-xs space-y-1 text-slate-300 font-mono max-h-40 overflow-y-auto">
+                                <div class="text-slate-500">No data</div>
+                            </div>
                         </div>
                     </div>
                 </div>
 
-                <button onclick="openSahyogModal()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-3 rounded-lg text-sm transition shadow-lg shadow-emerald-900/30">
+                <!-- SAHYOG Action Button -->
+                <button 
+                    id="sahyogBtn"
+                    onclick="openSahyogModal()" 
+                    disabled
+                    class="w-full bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-700 disabled:text-slate-500 text-white font-semibold py-3 rounded-lg text-sm transition shadow-lg shadow-emerald-900/30"
+                >
                     Route Lawful Notice via SAHYOG
                 </button>
+                <button 
+                    id="reportBtn"
+                    onclick="generateReport()" 
+                    disabled
+                    class="w-full bg-slate-700 hover:bg-slate-600 disabled:bg-slate-800 disabled:text-slate-600 text-slate-200 font-semibold py-2.5 rounded-lg text-xs transition"
+                >
+                    📄 Generate Investigation Report
+                </button>
             </div>
+        </div>
+
+        <!-- Detailed Transaction Info (Optional Expandable) -->
+        <div id="detailedInfo" class="hidden lg:col-span-3 bg-slate-800/40 backdrop-blur-sm p-5 border border-slate-800 rounded-xl fade-in">
+            <h3 class="text-sm font-semibold text-slate-300 mb-3">📋 Transaction Details</h3>
+            <div id="transactionsList" class="space-y-3"></div>
         </div>
     </div>
 
     <!-- SAHYOG Modal -->
-    <div id="sahyogModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center p-4 z-50">
-        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+    <div id="sahyogModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center p-4 z-50 modal-overlay">
+        <div class="bg-slate-800 border border-slate-700 rounded-xl p-6 max-w-md w-full space-y-4 shadow-2xl fade-in">
             <h3 class="text-lg font-bold text-slate-100">Route to SAHYOG Portal</h3>
             <p class="text-xs text-slate-400">Generate Section 91 CrPC notice dispatch payload to designated VASP officer.</p>
-            <div class="space-y-1">
-                <label class="text-xs text-slate-400">Case Reference Number</label>
-                <input type="text" value="NCR-2026-88491" class="w-full bg-slate-900 border border-slate-700 rounded p-2 text-xs font-mono text-slate-300" readonly>
+            
+            <div class="space-y-3 bg-slate-900 p-3 rounded-lg border border-slate-700">
+                <div>
+                    <label class="text-xs text-slate-400 font-semibold block mb-1">Case Reference Number</label>
+                    <input type="text" id="caseRef" value="NCR-2026-88491" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500" readonly>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 font-semibold block mb-1">Target VASP</label>
+                    <input type="text" id="modalVaspName" value="—" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500" readonly>
+                </div>
+                <div>
+                    <label class="text-xs text-slate-400 font-semibold block mb-1">Confidence</label>
+                    <input type="text" id="modalConfidence" value="—" class="w-full bg-slate-800 border border-slate-700 rounded p-2 text-xs font-mono text-slate-300 focus:outline-none focus:border-blue-500" readonly>
+                </div>
             </div>
+
+            <div id="dispatchStatus" class="hidden"></div>
+
             <div class="flex justify-end gap-2 pt-2">
-                <button onclick="closeSahyogModal()" class="px-4 py-2 text-xs text-slate-400 hover:text-white transition">Cancel</button>
-                <button onclick="simulateDispatch()" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-medium transition">Dispatch Notice</button>
+                <button 
+                    onclick="closeSahyogModal()" 
+                    class="px-4 py-2 text-xs text-slate-400 hover:text-white transition"
+                >
+                    Cancel
+                </button>
+                <button 
+                    id="dispatchBtn"
+                    onclick="simulateDispatch()" 
+                    class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded text-xs font-semibold transition"
+                >
+                    Dispatch Notice
+                </button>
             </div>
         </div>
     </div>
 
     <script>
         let network = null;
+        let currentTraceData = null;
 
+        // Utility Functions
+        function showAlert(message, type = 'error') {
+            const container = document.getElementById('alertContainer');
+            const className = type === 'error' ? 'error-alert' : 'success-alert';
+            container.innerHTML = `<div class="${className}">${message}</div>`;
+            container.classList.remove('hidden');
+            container.classList.add('fade-in');
+            setTimeout(() => container.classList.add('hidden'), 5000);
+        }
+
+        function showNetworkLoading(show) {
+            document.getElementById('networkLoading').classList.toggle('hidden', !show);
+            document.getElementById('network-canvas').classList.toggle('hidden', show);
+        }
+
+        function updateApiStatus(show, processing = true) {
+            const status = document.getElementById('apiStatus');
+            if (show) {
+                status.classList.remove('hidden', 'status-success');
+                status.classList.add('status-processing');
+                status.innerHTML = '<span class="spinner"></span> Processing...';
+            } else {
+                status.classList.add('status-success');
+                status.classList.remove('status-processing');
+                status.innerHTML = '<span>✓</span> Complete';
+                setTimeout(() => status.classList.add('hidden'), 2000);
+            }
+        }
+
+        function formatAddress(addr) {
+            if (!addr) return 'N/A';
+            return addr.substring(0, 6) + '...' + addr.substring(addr.length - 4);
+        }
+
+        function getRiskLevel(confidence) {
+            if (confidence >= 80) return { level: 'CRITICAL', badge: 'badge-error' };
+            if (confidence >= 60) return { level: 'HIGH', badge: 'badge-error' };
+            if (confidence >= 40) return { level: 'MEDIUM', badge: 'badge-warning' };
+            return { level: 'LOW', badge: 'badge-success' };
+        }
+
+        // Main Trace Function
         async function runTrace() {
-            const addr = document.getElementById("walletInput").value;
-            const res = await fetch(`/api/trace/${addr}`);
-            const data = await res.json();
+            const addr = document.getElementById('walletInput').value.trim();
+            
+            if (!addr) {
+                showAlert('Please enter a valid wallet address', 'error');
+                return;
+            }
 
-            // 1. Update Sidebar Information
-            document.getElementById("vaspName").innerText = data.attribution.vasp;
-            document.getElementById("confScore").innerText = data.attribution.confidence + "%";
-            document.getElementById("pathDisplay").innerHTML = data.attribution.path.join("<br> └─> ");
+            if (!addr.startsWith('0x') || addr.length !== 42) {
+                showAlert('Invalid Ethereum address format. Expected 0x...(40 hex chars)', 'error');
+                return;
+            }
 
-            // 2. Clear Previous Graph Network Instance
+            // Disable UI & Show Loading
+            const traceBtn = document.getElementById('traceBtn');
+            traceBtn.disabled = true;
+            updateApiStatus(true);
+            showNetworkLoading(true);
+            document.getElementById('alertContainer').classList.add('hidden');
+
+            try {
+                // Fetch Data from Backend
+                const response = await fetch(`/api/trace/${addr}`);
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                currentTraceData = data;
+
+                // Validate Response Structure
+                if (!data.nodes || !data.edges || !data.attribution) {
+                    throw new Error('Invalid response structure from server');
+                }
+
+                // Update UI with Trace Results
+                updateAttributionAnalysis(data);
+                updateNetworkGraph(data);
+                showNetworkLoading(false);
+
+                document.getElementById('graphStatus').textContent = `Graph generated with ${data.nodes.length} nodes and ${data.edges.length} transactions`;
+                showAlert('Trace completed successfully!', 'success');
+
+            } catch (error) {
+                console.error('Trace Error:', error);
+                showAlert(`Trace failed: ${error.message}`, 'error');
+                showNetworkLoading(false);
+                resetUI();
+            } finally {
+                traceBtn.disabled = false;
+                updateApiStatus(false);
+            }
+        }
+
+        function updateAttributionAnalysis(data) {
+            const attr = data.attribution;
+            const confidence = attr.confidence || 0;
+            const hopCount = (attr.path || []).length - 1;
+            const risk = getRiskLevel(confidence);
+
+            // Update VASP Name
+            const vaspName = document.getElementById('vaspName');
+            vaspName.textContent = attr.vasp || 'Unattributed';
+            vaspName.classList.remove('pulse');
+
+            // Update Confidence Score
+            document.getElementById('confScore').textContent = confidence + '%';
+            document.getElementById('confFill').style.width = confidence + '%';
+
+            // Update Hop Count
+            document.getElementById('hopCount').textContent = hopCount;
+
+            // Update Risk Level
+            const riskEl = document.getElementById('riskLevel');
+            riskEl.textContent = risk.level;
+            riskEl.className = `text-sm font-bold mt-2 px-2 py-1 rounded inline-block ${risk.badge}`;
+
+            // Update Path Display
+            const pathDisplay = document.getElementById('pathDisplay');
+            if (attr.path && attr.path.length > 0) {
+                pathDisplay.innerHTML = attr.path.map((addr, idx) => {
+                    const isVasp = idx === attr.path.length - 1;
+                    const badge = isVasp ? '<span class="badge-success px-1 py-0.5 rounded text-xs">VASP</span>' : '';
+                    return `<div class="transaction-hop">
+                        <span class="text-slate-500">${idx === 0 ? '📍' : idx === attr.path.length - 1 ? '✓' : '→'}</span>
+                        <span class="font-mono flex-1 break-all">${formatAddress(addr)}</span>
+                        ${badge}
+                    </div>`;
+                }).join('');
+            }
+
+            // Enable SAHYOG Button and Report Button
+            document.getElementById('sahyogBtn').disabled = false;
+            document.getElementById('reportBtn').disabled = false;
+            document.getElementById('modalVaspName').value = attr.vasp || '—';
+            document.getElementById('modalConfidence').value = confidence + '%';
+
+            // Show transaction details if available
+            if (data.edges && data.edges.length > 0) {
+                updateTransactionDetails(data.edges);
+            }
+        }
+
+        function updateTransactionDetails(edges) {
+            const detailedInfo = document.getElementById('detailedInfo');
+            const transactionsList = document.getElementById('transactionsList');
+            
+            if (edges.length === 0) return;
+
+            let html = edges.map((edge, idx) => `
+                <div class="info-card">
+                    <div class="text-xs text-slate-400 mb-1">Transaction #${idx + 1}</div>
+                    <div class="text-xs text-slate-300 space-y-1 font-mono">
+                        <div>From: <span class="text-blue-300">${formatAddress(edge.from)}</span></div>
+                        <div>To: <span class="text-emerald-300">${formatAddress(edge.to)}</span></div>
+                        <div>Label: <span class="text-yellow-300">${edge.label || 'N/A'}</span></div>
+                    </div>
+                </div>
+            `).join('');
+
+            transactionsList.innerHTML = html;
+            detailedInfo.classList.remove('hidden');
+        }
+
+        function updateNetworkGraph(data) {
+            // Destroy Previous Network if Exists
             if (network !== null) {
                 network.destroy();
                 network = null;
             }
 
-            // 3. Prepare Graph Datasets
-            const container = document.getElementById('network-canvas');
-            const nodes = new vis.DataSet(data.nodes.map(n => ({
-                id: n.id,
-                label: n.label,
-                color: n.group === 'suspect' ? '#ef4444' : (n.group === 'vasp' ? '#10b981' : '#eab308'),
-                font: { color: '#ffffff', size: 12 }
-            })));
-            const edges = new vis.DataSet(data.edges);
-
-            // 4. Initialize Vis.js Network
-            network = new vis.Network(container, { nodes, edges }, {
-                nodes: { 
-                    shape: 'dot', 
-                    size: 18,
+            // Prepare Nodes Dataset with Enhanced Styling
+            const nodes = new vis.DataSet(
+                data.nodes.map(n => ({
+                    id: n.id,
+                    label: n.label || formatAddress(n.id),
+                    title: n.id,
+                    color: n.group === 'suspect' 
+                        ? { background: '#ef4444', border: '#991b1b', highlight: { background: '#fca5a5', border: '#991b1b' } }
+                        : n.group === 'vasp'
+                        ? { background: '#10b981', border: '#065f46', highlight: { background: '#86efac', border: '#065f46' } }
+                        : { background: '#eab308', border: '#78350f', highlight: { background: '#fde047', border: '#78350f' } },
+                    shape: 'dot',
+                    size: 20,
                     borderWidth: 2,
-                    color: { border: '#1e293b' }
-                },
-                edges: {
+                    font: { color: '#ffffff', size: 11, face: 'monospace', bold: { color: '#ffffff' } },
+                    shadow: { enabled: true, color: 'rgba(0,0,0,0.5)', size: 10, x: 2, y: 2 }
+                }))
+            );
+
+            // Prepare Edges Dataset
+            const edges = new vis.DataSet(
+                data.edges.map(e => ({
+                    from: e.from,
+                    to: e.to,
+                    label: e.label || '',
+                    arrows: 'to',
                     color: { color: '#64748b', highlight: '#38bdf8' },
-                    arrows: { to: { enabled: true, scaleFactor: 0.8 } },
-                    font: { color: '#94a3b8', size: 10, align: 'top' }
-                },
+                    font: { color: '#94a3b8', size: 10, align: 'middle' },
+                    smooth: { type: 'continuous' }
+                }))
+            );
+
+            // Initialize Vis.js Network with Physics
+            const container = document.getElementById('network-canvas');
+            network = new vis.Network(container, { nodes, edges }, {
                 physics: {
                     enabled: true,
-                    stabilization: { iterations: 100 }
+                    barnesHut: {
+                        gravitationalConstant: -15000,
+                        centralGravity: 0.3,
+                        springLength: 200
+                    },
+                    maxVelocity: 50,
+                    solver: 'barnesHut',
+                    timestep: 0.35,
+                    stabilization: { iterations: 150 }
+                },
+                interaction: {
+                    hover: true,
+                    navigationButtons: true,
+                    keyboard: true,
+                    zoomView: true,
+                    dragView: true
                 }
             });
 
-            // 5. Freeze Physics Once Positions Stabilize (Prevents Unwanted Shifting)
-            network.once("stabilizationIterationsDone", function() {
-                network.setOptions({ physics: false });
+            // Stabilize & Lock Physics
+            network.once('stabilizationIterationsDone', () => {
+                network.setOptions({ physics: { enabled: false } });
             });
         }
 
+        function generateReport() {
+            if (!currentTraceData) return;
+            document.getElementById('printTimestamp').textContent = new Date().toLocaleString();
+            window.print();
+        }
+
+        function resetUI() {
+            document.getElementById('vaspName').innerHTML = '<span class="pulse text-slate-500">—</span>';
+            document.getElementById('confScore').textContent = '0%';
+            document.getElementById('confFill').style.width = '0%';
+            document.getElementById('hopCount').textContent = '—';
+            document.getElementById('riskLevel').textContent = '—';
+            document.getElementById('pathDisplay').innerHTML = '<div class="text-slate-500">No data</div>';
+            document.getElementById('detailedInfo').classList.add('hidden');
+            document.getElementById('sahyogBtn').disabled = true;
+            document.getElementById('reportBtn').disabled = true;
+        }
+
+        // SAHYOG Modal Functions
         function openSahyogModal() {
-            const modal = document.getElementById("sahyogModal");
-            modal.classList.remove("hidden");
-            modal.classList.add("flex");
+            if (!currentTraceData) return;
+            const modal = document.getElementById('sahyogModal');
+            document.getElementById('dispatchStatus').classList.add('hidden');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
         }
 
         function closeSahyogModal() {
-            const modal = document.getElementById("sahyogModal");
-            modal.classList.add("hidden");
-            modal.classList.remove("flex");
+            const modal = document.getElementById('sahyogModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+            document.getElementById('dispatchStatus').classList.add('hidden');
+            document.getElementById('dispatchBtn').disabled = false;
         }
 
-        function simulateDispatch() {
-            alert("Success! Lawful disclosure request payload encrypted and routed to SAHYOG Nodal Officer.");
-            closeSahyogModal();
+        async function simulateDispatch() {
+            const btn = document.getElementById('dispatchBtn');
+            const status = document.getElementById('dispatchStatus');
+            
+            btn.disabled = true;
+            status.innerHTML = '<div class="success-alert" style="display: flex; align-items: center; gap: 8px;"><span class="spinner" style="border-color: #86efac; border-top-color: #10b981;"></span> Encrypting payload...</div>';
+            status.classList.remove('hidden');
+
+            // Simulate dispatch delay
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            status.innerHTML = '<div class="success-alert">✓ Lawful disclosure request payload encrypted and routed to SAHYOG Nodal Officer. Notice ID: SAH-' + Date.now().toString().slice(-6) + '</div>';
+            
+            setTimeout(() => {
+                closeSahyogModal();
+                showAlert('Lawful notice successfully dispatched via SAHYOG portal.', 'success');
+            }, 2000);
         }
 
-        window.onload = runTrace;
+        // Initialize on Page Load
+        window.addEventListener('load', () => {
+            document.getElementById('walletInput').focus();
+        });
+
+        // Allow Enter Key to Trigger Trace
+        document.getElementById('walletInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') runTrace();
+        });
+
+        // Close Modal on Outside Click
+        document.getElementById('sahyogModal').addEventListener('click', (e) => {
+            if (e.target === document.getElementById('sahyogModal')) {
+                closeSahyogModal();
+            }
+        });
     </script>
 </body>
 </html>
