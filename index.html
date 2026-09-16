@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SAHYOG - Crypto Wallet Attribution Engine (D4C)</title>
+    <title>SAHYOG - Crypto Wallet Attribution Engine</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- Vis.js Network CDN -->
@@ -289,7 +289,7 @@
 
                         <!-- Confidence Score -->
                         <div class="info-card">
-                            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Confidence Score</div>
+                            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Attribution Confidence</div>
                             <div class="flex items-baseline gap-3 mt-2">
                                 <span id="confScore" class="text-4xl font-extrabold text-blue-400">0%</span>
                                 <div class="flex-1">
@@ -298,7 +298,21 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="text-xs text-slate-500 mt-2">Base × Hop × Recency × Volume</div>
+                            <div class="text-xs text-slate-500 mt-2">Base × Hop × Recency × Volume — how sure we are THIS is the right exchange</div>
+                        </div>
+
+                        <!-- Laundering Risk Score -->
+                        <div class="info-card">
+                            <div class="text-xs text-slate-400 font-semibold uppercase tracking-wide">Laundering Risk</div>
+                            <div class="flex items-baseline gap-3 mt-2">
+                                <span id="riskScore" class="text-4xl font-extrabold text-orange-400">0%</span>
+                                <div class="flex-1">
+                                    <div class="confidence-bar">
+                                        <div id="riskFill" class="confidence-fill" style="width: 0%; background: linear-gradient(90deg, #f59e0b, #ef4444);"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="text-xs text-slate-500 mt-2">Hops × Value Drop × Age × Wallet Type — how deliberately the trail is obscured</div>
                         </div>
 
                         <!-- Hop Count & Risk Level -->
@@ -429,10 +443,10 @@
             return addr.substring(0, 6) + '...' + addr.substring(addr.length - 4);
         }
 
-        function getRiskLevel(confidence) {
-            if (confidence >= 80) return { level: 'CRITICAL', badge: 'badge-error' };
-            if (confidence >= 60) return { level: 'HIGH', badge: 'badge-error' };
-            if (confidence >= 40) return { level: 'MEDIUM', badge: 'badge-warning' };
+        function getRiskLevel(riskScore) {
+            if (riskScore >= 70) return { level: 'CRITICAL', badge: 'badge-error' };
+            if (riskScore >= 45) return { level: 'HIGH', badge: 'badge-error' };
+            if (riskScore >= 20) return { level: 'MEDIUM', badge: 'badge-warning' };
             return { level: 'LOW', badge: 'badge-success' };
         }
 
@@ -495,8 +509,9 @@
         function updateAttributionAnalysis(data) {
             const attr = data.attribution;
             const confidence = attr.confidence || 0;
+            const riskScore = attr.risk_score || 0;
             const hopCount = (attr.path || []).length - 1;
-            const risk = getRiskLevel(confidence);
+            const risk = getRiskLevel(riskScore);
 
             // Update VASP Name
             const vaspName = document.getElementById('vaspName');
@@ -506,6 +521,10 @@
             // Update Confidence Score
             document.getElementById('confScore').textContent = confidence + '%';
             document.getElementById('confFill').style.width = confidence + '%';
+
+            // Update Laundering Risk Score
+            document.getElementById('riskScore').textContent = riskScore + '%';
+            document.getElementById('riskFill').style.width = riskScore + '%';
 
             // Update Hop Count
             document.getElementById('hopCount').textContent = hopCount;
@@ -641,6 +660,8 @@
             document.getElementById('vaspName').innerHTML = '<span class="pulse text-slate-500">—</span>';
             document.getElementById('confScore').textContent = '0%';
             document.getElementById('confFill').style.width = '0%';
+            document.getElementById('riskScore').textContent = '0%';
+            document.getElementById('riskFill').style.width = '0%';
             document.getElementById('hopCount').textContent = '—';
             document.getElementById('riskLevel').textContent = '—';
             document.getElementById('pathDisplay').innerHTML = '<div class="text-slate-500">No data</div>';

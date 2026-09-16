@@ -82,6 +82,7 @@ def trace_address(address: str):
             "attribution": {
                 "vasp": vasp_info["name"],
                 "confidence": 99,
+                "risk_score": 0,
                 "path": [target],
                 "note": "Submitted address is itself a registered VASP wallet (0 hops)."
             }
@@ -120,6 +121,7 @@ def trace_address(address: str):
     # 3. Compute Shortest Path & Math Score
     attributed_vasp = None
     confidence_score = 0
+    risk_score = 0
     shortest_path = [target]
     
     vasp_nodes = [n for n in G.nodes() if n in VASP_REGISTRY]
@@ -145,6 +147,7 @@ def trace_address(address: str):
         
         H_k = 1.00 if k == 1 else (0.85 if k == 2 else (0.50 if k == 3 else 0.00))
         
+        first_edge = G.edges[best_path[0], best_path[1]]
         last_edge = G.edges[best_path[-2], best_path[-1]]
         val_usd = last_edge["value_usd"]
         age = last_edge["age_days"]
@@ -154,6 +157,25 @@ def trace_address(address: str):
 
         raw_score = W_base * H_k * R_dt * V_w * 100
         confidence_score = min(99, int(raw_score))
+
+        # --- LAUNDERING / OBFUSCATION RISK SCORE ---
+        # Deliberately independent of confidence: more hops make us LESS sure
+        # of the exact destination (confidence goes down) but MORE suspicious
+        # of deliberate layering (risk goes up). Conflating the two into one
+        # number is what made a direct 1-hop deposit look "safer" than a
+        # heavily laundered 3-hop chain in the earlier version.
+        HOP_RISK = {1: 10, 2: 35, 3: 60}
+        hop_risk = HOP_RISK.get(k, 75)
+
+        val_start = first_edge["value_usd"]
+        val_drop_pct = max(0.0, (val_start - val_usd) / val_start * 100) if val_start else 0.0
+        value_drop_risk = min(20, val_drop_pct * 0.4)
+
+        age_risk = 0 if age <= 30 else (10 if age <= 90 else 20)
+
+        wallet_type_risk = 10 if vasp_info["type"] == "Hot Wallet" else 0
+
+        risk_score = min(99, int(hop_risk + value_drop_risk + age_risk + wallet_type_risk))
 
     # 4. Construct JSON Payload (Only nodes connected to target)
     nodes_payload = []
@@ -178,6 +200,7 @@ def trace_address(address: str):
         "attribution": {
             "vasp": attributed_vasp or "Unattributed / No VASP Path",
             "confidence": confidence_score,
+            "risk_score": risk_score,
             "path": shortest_path
         }
     }
